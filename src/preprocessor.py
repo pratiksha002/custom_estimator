@@ -3,13 +3,18 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, PolynomialFeatures
 from sklearn.impute import SimpleImputer
+from sklearn.feature_selection import VarianceThreshold
 
 class SmartPreprocessor(BaseEstimator, TransformerMixin):
 
-    def __init__(self, add_polynomial=False, degree=2, handle_outliers=False):
+    def __init__(self, add_polynomial=False, degree=2, handle_outliers=False, handle_skew=True, skew_threshold=0.75, feature_selection=True, variance_threshold=0.01):
         self.add_polynomial = add_polynomial
         self.degree = degree
         self.handle_outliers = handle_outliers
+        self.handle_skew = handle_skew
+        self.skew_threshold = skew_threshold
+        self.feature_selection = feature_selection
+        self.variance_threshold = variance_threshold
 
     def fit(self, x, y=None):
         x = pd.DataFrame(x)
@@ -18,50 +23,80 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
         self.num_cols = x.select_dtypes(include=np.number).columns.tolist()
         self.cat_cols = x.select_dtypes(exclude=np.number).columns.tolist()
 
-        #pipelines
+        #imputer
         self.num_imputer = SimpleImputer(strategy="median")
-        self.scaler = StandardScaler()
-
         self.cat_imputer = SimpleImputer(strategy="most_frequent")
-        self.encoder = OneHotEncoder(handle_unknown="ignore", sparse=False)
 
-        #fit numerical data
+        #fit the imputers
         x_num = self.num_imputer.fit_transform(x[self.num_cols])
-        self.scaler.fit(x_num)
-
-        #fit categorical data
         x_cat = self.cat_imputer.fit_transform(x[self.cat_cols])
-        self.encoder.fit(x_cat)
+
+        #skew detection 
+        if self.handle_skew:
+            skewness = pd.DataFrame(x_num, columns=self.num_cols).skew()
+            self.skewed_features = skewness[skewness > self.skew_threshold].index.tolist()
+        else:
+            self.skewed_features = []
+
+        #transform the skewed features
+        x_num = self.handle_skew(x_num)
+
+        #scaling
+        self.scaler = StandardScaler()
+        self.scaler.fit(x_num)
 
         #polynomial
         if self.add_polynomial:
             self.poly = PolynomialFeatures(degree=self.degree, include_bias=False)
-            self.poly.fit(x_num)
+            x_num = self.poly.fit_transform(x_num)
+
+        #encode
+        self.encoder = OneHotEncoder(handle_unknown="ignore", sparse=False)
+        self.encoder.fit(x_cat)
+
+        #combine
+        x_cat_enc = self.encoder.transform(x_cat)
+        x_full = np.hstack([x_num, x_cat_enc])
+
+        #feature selection
+        if self.feature_selection:
+            self.selector = VarianceThreshold(threshold=self.variance_threshold)
+            self.selector.fit(x_full)
 
         return self
 
     def transform(self, x):
         x = pd.DataFrame
 
-        #numerical
-        x_num = self.num_imputer.fit_transform(x[self.num_cols])
+        #impute
+        x_num = self.num_imputer.transform(x[self.num_cols])
+        x_cat = self.cat_imputer.transform(x[self.cat_cols])
 
+        #outliers
         if self.handle_outliers:
-            x_num = self._clip_outliers(x_num)
+            x_num  = self._clip_outliers(x_num)
 
+        #skew
+        x_num = self._handle_skew(x_num)
+
+        #scale
         x_num = self.scaler.transform(x_num)
 
+        #polynomial
         if self.add_polynomial:
             x_num = self.poly.transform(x_num)
 
-        #categorical
-        x_cat = self.cat_imputer.transform(x[self.cat_cols])
-        x_cat = self.encoder,self.transform(x_cat)
+        #encode
+        x_cat = self.encoder.transform(x_cat)
 
         #combine
-        x_final = np.hstack([x_num, x_cat])
+        x_full = np.hstack([x_num, x_cat])
 
-        return x_final
+        #feature selection
+        if self.feature_selection:
+            x_full = self.selector.transform(x_full)
+
+        return x_full
     
     def _clip_outliers(self, x):
         Q1 = np.percentile(x, 25, axis=0)
@@ -73,6 +108,17 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
 
         return np.clip(x, lower, upper)
     
+    def _handle_skew(self, x):
+        if not self.skewed_features:
+            return x
+        
+        x_df = pd.DataFrame(x, columns=self.num_cols)
+
+        for col in self.skewed_features:
+            x_df[col] = np.log1p(x_df[col])
+
+        return x_df.values
+    
     def get_feature_names_out(self):
         num_features = self.num_cols
 
@@ -81,4 +127,10 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
 
         cat_features = self.encoder.get_feature_names_out(self.cat_cols)
 
-        return np.concatenate([num_features, cat_features])
+        all_features =  np.concatenate([num_features, cat_features])
+
+        if self.feature_selection:
+            mask = self.selector.get_support()
+            all_features = all_features[mask]
+
+        return all_features
