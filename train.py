@@ -9,15 +9,12 @@ import joblib
 import os
 
 #sample dataset
-data = pd.DataFrame({
-    "area" : [1000, 1200, 1300, 1500, None, 1800, 2000],
-    "bedrooms" : [2, 3, 3, 4, 3, 4, 5],
-    "location" : ["A", "B", "A", "C", "B", "C", "A"],
-    "price" : [200000, 250000, 270000, 300000, 260000, 320000, 400000]
-})
-
-x = data.drop("price", axis=1)
-y = data["price"]
+data = pd.read_csv("data/car data.csv")
+target_column = "Selling_Price"
+data = data.dropna(subset=[target_column])
+x = data.drop(target_column, axis=1)
+x = x.drop("Car_Name", axis=1)
+y = data[target_column]
 
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
