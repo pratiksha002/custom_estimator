@@ -27,6 +27,8 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
         self.num_imputer = SimpleImputer(strategy="median")
         self.cat_imputer = SimpleImputer(strategy="most_frequent")
 
+        self.global_mean = y.mean() if y is not None else 0
+
         #fit the imputers
         x_num = self.num_imputer.fit_transform(x[self.num_cols])
         x_cat = self.cat_imputer.fit_transform(x[self.cat_cols])
@@ -38,8 +40,18 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
         else:
             self.skewed_features = []
 
+        # Target Encoding
+        if y is not None:
+            self.target_encoding_maps = {}
+            x_cat_df = pd.DataFrame(x_cat, columns=self.cat_cols)
+
+            for col in self.cat_cols:
+                temp = pd.DataFrame({col: x_cat_df[col], "target": y})
+                self.target_encoding_maps[col] = temp.groupby(col)["target"].mean().to_dict()
+
         #transform the skewed features
-        x_num = self.handle_skew(x_num)
+        if self.handle_skew:
+            x_num = self._handle_skew(x_num)
 
         #scaling
         self.scaler = StandardScaler()
@@ -50,13 +62,21 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
             self.poly = PolynomialFeatures(degree=self.degree, include_bias=False)
             x_num = self.poly.fit_transform(x_num)
 
-        #encode
-        self.encoder = OneHotEncoder(handle_unknown="ignore", sparse=False)
+        #encode (kept but not used after target encoding)
+        self.encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
         self.encoder.fit(x_cat)
 
-        #combine
-        x_cat_enc = self.encoder.transform(x_cat)
-        x_full = np.hstack([x_num, x_cat_enc])
+        #combine (using target encoding instead of one-hot)
+        x_cat_df = pd.DataFrame(x_cat, columns=self.cat_cols)
+
+        for col in self.cat_cols:
+            x_cat_df[col] = x_cat_df[col].map(self.target_encoding_maps[col])
+            x_cat_df[col] = x_cat_df[col].fillna(self.global_mean)
+        x_cat_df = x_cat_df.fillna(self.global_mean)
+        x_cat = x_cat_df.values
+        x_full = np.hstack([x_num, x_cat])
+        x_full = np.nan_to_num(x_full, nan=self.global_mean)
+
 
         #feature selection
         if self.feature_selection:
@@ -66,7 +86,7 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, x):
-        x = pd.DataFrame
+        x = pd.DataFrame(x)
 
         #impute
         x_num = self.num_imputer.transform(x[self.num_cols])
@@ -77,7 +97,8 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
             x_num  = self._clip_outliers(x_num)
 
         #skew
-        x_num = self._handle_skew(x_num)
+        if self.handle_skew:
+            x_num = self._handle_skew(x_num)
 
         #scale
         x_num = self.scaler.transform(x_num)
@@ -86,11 +107,19 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
         if self.add_polynomial:
             x_num = self.poly.transform(x_num)
 
-        #encode
-        x_cat = self.encoder.transform(x_cat)
+        #target encoding
+        x_cat_df = pd.DataFrame(x_cat, columns=self.cat_cols)
+
+        for col in self.cat_cols:
+           x_cat_df[col] = x_cat_df[col].map(self.target_encoding_maps[col])
+
+           x_cat_df[col].fillna(self.global_mean)
+        x_cat_df = x_cat_df.fillna(self.global_mean)
+        x_cat = x_cat_df.values
 
         #combine
         x_full = np.hstack([x_num, x_cat])
+        x_full = np.nan_to_num(x_full, nan=self.global_mean)
 
         #feature selection
         if self.feature_selection:
@@ -125,7 +154,8 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
         if self.add_polynomial:
             num_features = self.poly.get_feature_names_out(self.num_cols)
 
-        cat_features = self.encoder.get_feature_names_out(self.cat_cols)
+        # simplified feature names for target encoding
+        cat_features = self.cat_cols
 
         all_features =  np.concatenate([num_features, cat_features])
 
