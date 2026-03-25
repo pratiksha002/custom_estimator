@@ -1,65 +1,25 @@
-# Smart Preprocessor (Custom Estimator)
+# Smart Preprocessing Estimator
 
-## 🚀 Overview
-This project implements a custom scikit-learn compatible preprocessing estimator that automates data preprocessing.
+## Overview
+Built a custom scikit-learn compatible estimator that automates preprocessing and improves model performance.
 
-## 🔥 Features
+## Features
 - Automatic numerical & categorical detection
 - Missing value handling
-- One-hot encoding
-- Feature scaling
-- Polynomial feature generation
-- Outlier handling
-- Pipeline compatible
+- Target encoding
+- Outlier and skew handling
+- Feature engineering (polynomial, selection)
+- Fully compatible with sklearn pipelines
 
-## 🧠 Usage
+## Dataset
+Car Price Prediction Dataset
 
-```python
-from src.preprocessor import SmartPreprocessor
+## Model
+Ridge Regression with GridSearchCV
 
-preprocessor = SmartPreprocessor(add_polynomial=True)
-X_transformed = preprocessor.fit_transform(X)
+## Results
+- R² Score: 0.81
+- MSE: 4.2
 
-## ⚙️ Pipeline Example
-Pipeline([
-    ("preprocessing", SmartPreprocessor()),
-    ("model", Ridge())
-])
-##📦 Installation
-pip install -r requirements.txt
-📊 Future Improvements
-Target encoding
-Auto feature selection
-Logging system
-AutoML integration
-
-
----
-
-# 🧪 5. (Optional) `notebook.ipynb`
-
-Just use it to:
-- Load real dataset
-- Test transformations
-- Visualize features
-
----
-
-# ✅ What You Now Have
-
-You built:
-- ✅ Custom sklearn-compatible estimator  
-- ✅ Pipeline integration  
-- ✅ Feature engineering system  
-- ✅ GitHub-ready project  
-
----
-
-# 🎯 Next Step (VERY IMPORTANT)
-
-Now do this:
-
-```bash
-git add .
-git commit -m "Added SmartPreprocessor and training pipeline"
-git push
+## Key Insight
+Simpler preprocessing outperformed complex transformations, demonstrating the importance of model regularization and data understanding.
