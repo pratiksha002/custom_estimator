@@ -113,8 +113,8 @@ class SmartPreprocessor(BaseEstimator, TransformerMixin):
         for col in self.cat_cols:
            x_cat_df[col] = x_cat_df[col].map(self.target_encoding_maps[col])
 
-           x_cat_df[col].fillna(self.global_mean)
-        x_cat_df = x_cat_df[col].fillna(self.global_mean)
+           x_cat_df[col] =  x_cat_df[col].fillna(self.global_mean)
+        x_cat_df = x_cat_df.fillna(self.global_mean)
         x_cat = x_cat_df.values
 
         #combine
